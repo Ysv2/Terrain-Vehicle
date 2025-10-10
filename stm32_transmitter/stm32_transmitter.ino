@@ -31,7 +31,7 @@ const unsigned char epd_bitmap_icon_swandbtntest [] PROGMEM = {
 
 // Array of all bitmaps for convenience. (Total bytes used to store images in PROGMEM = 144)
 const int epd_bitmap_allArray_LEN = 3;
-const unsigned char* bitmap_icons[3] = {
+const unsigned char* bitmap_icons[epd_bitmap_allArray_LEN] = {
 	epd_bitmap_icon_autocalibrate,
 	epd_bitmap_icon_manualsetup,
 	epd_bitmap_icon_swandbtntest
@@ -128,13 +128,35 @@ char menu_items [NUM_ITEMS] [MAX_ITEM_LENGTH] = {  // array with item names
   { "Auto Calibrate" }, 
   { "Manual Setup" }, 
   { "Sw and Btn Test" }
- };
+};
+
+const int NUM_PARAMS = 12; // number of items in the list and also the number of screenshots and screenshots with QR codes (other screens)
+const int MAX_NAME_LENGTH = 20; // maximum characters for the item name
+
+char param_items [NUM_PARAMS] [MAX_NAME_LENGTH] = {  // array with item names
+  { "centerX1" },
+  { "centerY1" },
+  { "minOffsetX1" },
+  { "maxOffsetX1" },
+  { "minOffsetY1" },
+  { "maxOffsetY1" },
+  { "centerX2" },
+  { "centerY2" },
+  { "minOffsetX2" },
+  { "maxOffsetX2" },
+  { "minOffsetY2" },
+  { "maxOffsetY2" },
+
+};
 
 
+bool manualEdit = false;
+bool saveChangesSelect = false;
 
 // OLED Setup - SSD1306
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 char joystickBuffer[5];
+char buf[5];
 
 // Pin Definitions
 #define JOYR_X A0
@@ -148,6 +170,7 @@ char joystickBuffer[5];
 #define DOWN_BTN PA11
 #define BACK_BTN PA12
 #define ARMED_SWITCH PA15
+#define LIGHT_SWITCH PB3
 #define VOLTAGE_PIN PB1
 
 // RF24 Setup
@@ -169,6 +192,11 @@ struct CalibrationData {
   int16_t centerX2, centerY2, minOffsetX2, maxOffsetX2, minOffsetY2, maxOffsetY2;
 };
 
+CalibrationData data;
+
+
+
+
 struct JoystickPayload {
   int8_t joyRX;
   int8_t joyRY;
@@ -176,7 +204,7 @@ struct JoystickPayload {
   int8_t joyLY;
 
   uint8_t armingSwitch : 1;
-  uint8_t toggleSwitch2 : 1;
+  uint8_t lightSwitch : 1;
   uint8_t toggle3Switch1 : 2;
   uint8_t toggle3Switch2 : 2;
   uint8_t reserved : 2;
@@ -185,19 +213,24 @@ struct JoystickPayload {
 JoystickPayload payload;
 
 
+int16_t params_data_list[NUM_PARAMS];
+
+
 // Timing
 unsigned long lastSendTime = 0;
 const unsigned long sendInterval = 20;  // 20ms (50Hz)
 
 // Calibration State
-bool isCalibrating = false;
+// bool isCalibrating = false;
 uint8_t calibrationStage = 0;
 unsigned long calibrationStartTime = 0;
+unsigned long prevTime = 0;
 
 int notConnectedCount = 100;
 
 bool armedSwitchState;
-int calBtnState;
+bool lightSwitchState;
+// int calBtnState;
 
 // Voltage divider resistors (in ohms)
 const float R1 = 10000.0; // 10kΩ
@@ -216,6 +249,11 @@ unsigned long batteryTime = 0;
 const unsigned long batteryInterval = 1000;
 
 bool confirmSelect = false;
+
+
+bool showText = true;
+unsigned long previousMillis = 0;
+const unsigned long blinkInterval = 300; // milliseconds
 
 // === DebouncedButton Class ===
 class DebouncedButton {
@@ -268,7 +306,9 @@ enum Screen {
   MENU,
   AUTOCALIBRATE,
   MANUALSETUP,
-  SWANDBTNTEST
+  SWANDBTNTEST,
+  AUTOCALIBRATE1,
+  SAVECHANGES,
 };
 
 Screen currentScreen = Screen::HOME;
@@ -277,6 +317,12 @@ int item_selected = 0; // which item in the menu is selected
 
 int item_sel_previous; // previous item - used in the menu screen to draw the item before the selected one
 int item_sel_next; // next item - used in the menu screen to draw next item after the selected one
+
+int param_selected = 0; // which item in the menu is selected
+
+int param_sel_previous; // previous item - used in the menu screen to draw the item before the selected one
+int param_sel_next; // next item - used in the menu screen to draw next item after the selected one
+
 
 // ==== Setup and Loop ==== //
 
@@ -293,6 +339,7 @@ void setup() {
   network.begin(this_node);
 
   pinMode(ARMED_SWITCH, INPUT_PULLUP);
+  pinMode(LIGHT_SWITCH, INPUT_PULLUP);
 
   loadCalibration();
 
@@ -310,7 +357,7 @@ void loop() {
   network.update();
 
   armedSwitchState = !digitalRead(ARMED_SWITCH); // True --> ON, False --> OFF
-  
+  lightSwitchState = !digitalRead(LIGHT_SWITCH); // True --> ON, False --> OFF
   // if (calibrateButton.isPressed() && !isCalibrating && !armedSwitchState) {
   //   startCalibration();
   // }
@@ -333,9 +380,9 @@ void loop() {
     sendPayload();
   }
 
-  if (isCalibrating) {
-    handleCalibration();
-  }
+  // if (isCalibrating) {
+  //   handleCalibration();
+  // }
 
   if (millis() - batteryTime >= batteryInterval) {
     batteryTime = millis();
@@ -359,6 +406,7 @@ void loop() {
   else if (currentScreen == Screen::MENU) {
     if (backButton.isPressed()) {
       currentScreen = Screen::HOME;
+      item_selected = 0;
     }
     else if (upButton.isPressed()) {
       item_selected = item_selected - 1;
@@ -381,6 +429,9 @@ void loop() {
       }
       else if (strcmp(menu_items[item_selected], "Manual Setup") == 0) {
         currentScreen = Screen::MANUALSETUP;
+        ManualSetupCal();
+        loadCalibration();
+        convertData(data, params_data_list);
       }
       else if (strcmp(menu_items[item_selected], "Sw and Btn Test") == 0) {
         currentScreen = Screen::SWANDBTNTEST;
@@ -397,7 +448,9 @@ void loop() {
     }
     else if (menuButton.isPressed()) {
       if (confirmSelect) {
-
+        currentScreen = Screen::AUTOCALIBRATE1;
+        prevTime = millis();
+        calibrationStage = 0;
       }
       else {
         currentScreen = Screen::MENU;
@@ -406,33 +459,71 @@ void loop() {
 
   }
   else if (currentScreen == Screen::MANUALSETUP) {
-    if (backButton.isPressed()) {
-      currentScreen = Screen::MENU;
+    if (!manualEdit) {
+      if (backButton.isPressed()) {
+        currentScreen = Screen::SAVECHANGES;
+        param_selected = 0;
+      }
+      else if (upButton.isPressed()) {
+        param_selected = param_selected - 1;
+        if (param_selected < 0) {
+          param_selected = NUM_PARAMS-1;
+        }
+      }
+      else if (downButton.isPressed()) {
+        param_selected = param_selected + 1;
+        if (param_selected >= NUM_PARAMS) {
+          param_selected = 0;
+        }
+      }
+      else if (menuButton.isPressed()) {
+        Serial.println(param_items[param_selected]);
+        manualEdit = true;
+      }
     }
-    else if (upButton.isPressed()) {
+    else {
+      if (backButton.isPressed()) {
+        manualEdit = false;
+      }
+      else if (upButton.isPressed()) {
+        params_data_list[param_selected] += 1;
+      }
+      else if (downButton.isPressed()) {
+        params_data_list[param_selected] -= 1;
+      }
+      else if (menuButton.isPressed()) {
+        manualEdit = false;
+      }
+    }
 
-    }
-    else if (downButton.isPressed()) {
-
-    }
-    else if (menuButton.isPressed()) {
-
-    }
+    ManualSetupCal();
   }
   else if (currentScreen == Screen::SWANDBTNTEST) {
     if (backButton.isPressed()) {
       currentScreen = Screen::MENU;
     }
-    else if (upButton.isPressed()) {
 
-    }
-    else if (downButton.isPressed()) {
-
-    }
-    else if (menuButton.isPressed()) {
-
+  }
+  else if (currentScreen == Screen::AUTOCALIBRATE1) {
+    handleCalibration();
+    if (calibrationStage == 6) {
+      currentScreen = Screen::MENU;
     }
   }
+
+  else if (currentScreen == Screen::SAVECHANGES) {
+    if (upButton.isPressed() || downButton.isPressed()) {
+      saveChangesSelect = !saveChangesSelect;
+    }
+    else if (menuButton.isPressed()) {
+      if (saveChangesSelect) {
+        convertBackData(params_data_list);
+        saveCalibration();
+      }
+      currentScreen = Screen::MENU;
+    }
+  }
+
 
 }
 
@@ -463,10 +554,10 @@ void waitForArmSwitch() {
   }
 }
 
-void startCalibration() {
-  isCalibrating = true;
-  calibrationStage = 0;
-}
+// void startCalibration() {
+//   isCalibrating = true;
+//   calibrationStage = 0;
+// }
 
 
 
@@ -480,7 +571,7 @@ void saveCalibration() {
 }
 
 void loadCalibration() {
-  CalibrationData data;
+
   EEPROM.get(EEPROM_ADDR, data);
   centerX1 = data.centerX1;
   centerY1 = data.centerY1;
@@ -507,7 +598,7 @@ void loadCalibration() {
   // Serial.println(maxOffsetX2);
   // Serial.println(minOffsetY2);
   // Serial.println(maxOffsetY2);
-}
+};
 
 JoystickPayload readJoystick() {
   JoystickPayload p;
@@ -597,88 +688,110 @@ void handleCalibration() {
 
   switch (calibrationStage) {
     case 0:
-      Serial.println("Center Joystick Right...");
-      calibrationStage++;
-      stableCount = 0;
-      break;
-
-    case 1:
-      {
-        int16_t currentX = analogRead(JOYR_X);
-        int16_t currentY = analogRead(JOYR_Y);
-        if (abs(currentX - lastX) < settleThreshold && abs(currentY - lastY) < settleThreshold) {
-          stableCount++;
-        } else {
-          stableCount = 0;
-        }
-        lastX = currentX;
-        lastY = currentY;
-        if (stableCount >= stableSamples) {
-          centerX1 = lastX;
-          centerY1 = lastY;
-          minOffsetX1 = maxOffsetX1 = 0;
-          minOffsetY1 = maxOffsetY1 = 0;
-          calibrationStage++;
-          stableCount = 0;
-          Serial.println("Joystick Right centered.");
-        }
-        break;
+    {
+      if ((millis() - prevTime) > 3000) {
+        Serial.println("Center Joystick Right...");
+        calibrationStage++;
+        stableCount = 0;
       }
-
+      break;
+    }
+    case 1:
+    {
+      int16_t currentX = analogRead(JOYR_X);
+      int16_t currentY = analogRead(JOYR_Y);
+      if (abs(currentX - lastX) < settleThreshold && abs(currentY - lastY) < settleThreshold) {
+        stableCount++;
+      } else {
+        stableCount = 0;
+      }
+      lastX = currentX;
+      lastY = currentY;
+      if (stableCount >= stableSamples) {
+        centerX1 = lastX;
+        centerY1 = lastY;
+        minOffsetX1 = maxOffsetX1 = 0;
+        minOffsetY1 = maxOffsetY1 = 0;
+        calibrationStage++;
+        stableCount = 0;
+        Serial.println("Joystick Right centered.");
+      }
+      break;
+      
+    }
     case 2:
+    {
       Serial.println("Center Joystick Left...");
       calibrationStage++;
       stableCount = 0;
       break;
+    }
 
     case 3:
-      {
-        int16_t currentX = analogRead(JOYL_X);
-        int16_t currentY = analogRead(JOYL_Y);
-        if (abs(currentX - lastX) < settleThreshold && abs(currentY - lastY) < settleThreshold) {
-          stableCount++;
-        } else {
-          stableCount = 0;
-        }
-        lastX = currentX;
-        lastY = currentY;
-        if (stableCount >= stableSamples) {
-          centerX2 = lastX;
-          centerY2 = lastY;
-          minOffsetX2 = maxOffsetX2 = 0;
-          minOffsetY2 = maxOffsetY2 = 0;
-          calibrationStage++;
-          calibrationStartTime = millis();
-          Serial.println("Joystick Left centered.");
-          Serial.println("Move both joysticks to max ranges...");
-        }
-        break;
+    {
+      int16_t currentX = analogRead(JOYL_X);
+      int16_t currentY = analogRead(JOYL_Y);
+      if (abs(currentX - lastX) < settleThreshold && abs(currentY - lastY) < settleThreshold) {
+        stableCount++;
+      } else {
+        stableCount = 0;
       }
+      lastX = currentX;
+      lastY = currentY;
+      if (stableCount >= stableSamples) {
+        centerX2 = lastX;
+        centerY2 = lastY;
+        minOffsetX2 = maxOffsetX2 = 0;
+        minOffsetY2 = maxOffsetY2 = 0;
+        calibrationStage++;
+        calibrationStartTime = millis();
+        Serial.println("Joystick Left centered.");
+        Serial.println("Move both joysticks to max ranges...");
+      }
+      break;
+    }
 
     case 4:
-      {
-        if (millis() - calibrationStartTime < 5000) {
-          int16_t rawX1 = analogRead(JOYR_X) - centerX1;
-          int16_t rawY1 = analogRead(JOYR_Y) - centerY1;
-          int16_t rawX2 = analogRead(JOYL_X) - centerX2;
-          int16_t rawY2 = analogRead(JOYL_Y) - centerY2;
+    {
+      if (millis() - calibrationStartTime < 5000) {
+        int16_t rawX1 = analogRead(JOYR_X) - centerX1;
+        int16_t rawY1 = analogRead(JOYR_Y) - centerY1;
+        int16_t rawX2 = analogRead(JOYL_X) - centerX2;
+        int16_t rawY2 = analogRead(JOYL_Y) - centerY2;
 
-          if (rawX1 < minOffsetX1) minOffsetX1 = rawX1;
-          if (rawX1 > maxOffsetX1) maxOffsetX1 = rawX1;
-          if (rawY1 < minOffsetY1) minOffsetY1 = rawY1;
-          if (rawY1 > maxOffsetY1) maxOffsetY1 = rawY1;
+        if (rawX1 < minOffsetX1) minOffsetX1 = rawX1;
+        if (rawX1 > maxOffsetX1) maxOffsetX1 = rawX1;
+        if (rawY1 < minOffsetY1) minOffsetY1 = rawY1;
+        if (rawY1 > maxOffsetY1) maxOffsetY1 = rawY1;
 
-          if (rawX2 < minOffsetX2) minOffsetX2 = rawX2;
-          if (rawX2 > maxOffsetX2) maxOffsetX2 = rawX2;
-          if (rawY2 < minOffsetY2) minOffsetY2 = rawY2;
-          if (rawY2 > maxOffsetY2) maxOffsetY2 = rawY2;
-        } else {
-          saveCalibration();
-          isCalibrating = false;
-          Serial.println("Calibration complete!");
-        }
-        break;
+        if (rawX2 < minOffsetX2) minOffsetX2 = rawX2;
+        if (rawX2 > maxOffsetX2) maxOffsetX2 = rawX2;
+        if (rawY2 < minOffsetY2) minOffsetY2 = rawY2;
+        if (rawY2 > maxOffsetY2) maxOffsetY2 = rawY2;
+      } else {
+        // saveCalibration(); //! TURN THIS BACK ON AFTER TESTING!!!
+        // isCalibrating = false;
+        Serial.println("Calibration complete!");
+        prevTime = millis();
+        calibrationStage++;
+        
       }
+      break;
+    }
+
+    case 5: // Show done screen for 3sec
+    {
+      if ((millis() - prevTime) > 3000) {
+        calibrationStage++;
+      }
+      break;
+    }
+
+    case 6:
+    {
+      break;
+    } 
+
   }
 }
 
@@ -702,6 +815,14 @@ void MenuScreenCal() {
   if (item_sel_previous < 0) {item_sel_previous = NUM_ITEMS - 1;} // previous item would be below first = make it the last
   item_sel_next = item_selected + 1;  
   if (item_sel_next >= NUM_ITEMS) {item_sel_next = 0;} // next item would be after last = make it the first
+}
+
+void ManualSetupCal() {
+  // set correct values for the previous and next items
+  param_sel_previous = param_selected - 1;
+  if (param_sel_previous < 0) {param_sel_previous = NUM_PARAMS - 1;} // previous item would be below first = make it the last
+  param_sel_next = param_selected + 1;  
+  if (param_sel_next >= NUM_PARAMS) {param_sel_next = 0;} // next item would be after last = make it the first
 }
 
 void drawUI() {
@@ -808,12 +929,195 @@ void drawUI() {
 
   }
   else if (currentScreen == Screen::MANUALSETUP) {
+    // selected item background
+    u8g2.drawXBMP(0, 22, 128, 21, bitmap_item_sel_outline);
+
+    // draw previous item as icon + label u8g_font_7x14
+    u8g2.setFont(u8g2_font_crox1h_tf);
+    u8g2.drawStr(5, 15, param_items[param_sel_previous]); 
+    itoa(params_data_list[param_sel_previous], buf, 10); // base 10
+    u8g2.drawStr(90, 15, buf); 
+
+    // u8g2.drawXBMP( 4, 2, 16, 16, bitmap_icons[param_sel_previous]);          
+
+    // draw selected item as icon + label in bold font
+    u8g2.setFont(u8g2_font_crox1hb_tf);    
+    u8g2.drawStr(5, 15+20+2, param_items[param_selected]);
+    // Serial.println(centerX1);
+    itoa(params_data_list[param_selected], buf, 10); // base 10
+    if (manualEdit) {
+      if (millis() - previousMillis >= blinkInterval) {
+        previousMillis = millis();
+        showText = !showText;
+      }
+      if (showText) {
+        u8g2.drawStr(90, 15+20+2, buf);
+      }
+
+    }
+    else {
+      u8g2.drawStr(90, 15+20+2, buf);   
+    }  
+    
+
+    // u8g2.drawXBMP( 4, 24, 16, 16, bitmap_icons[item_selected]);     
+
+    // draw next item as icon + label
+    u8g2.setFont(u8g2_font_crox1h_tf);     
+    u8g2.drawStr(5, 15+20+20+2+2, param_items[param_sel_next]);
+    itoa(params_data_list[param_sel_next], buf, 10); // base 10   
+    u8g2.drawStr(90, 15+20+20+2+2, buf); 
+    // u8g2.drawXBMP( 4, 46, 16, 16, bitmap_icons[item_sel_next]);  
+
+    // draw scrollbar background
+    u8g2.drawXBMP(128-8, 0, 8, 64, bitmap_scrollbar_background);
+
+    // draw scrollbar handle
+    u8g2.drawBox(125, 64/NUM_PARAMS * param_selected, 3, 64/NUM_PARAMS); 
 
   }
   else if (currentScreen == Screen::SWANDBTNTEST) {
     
+    u8g2.drawRFrame(2, 2, 124, 59, 5);
+
+    u8g2.setFont(u8g2_font_t0_11_tr);
+    u8g2.drawStr(13, 21, "Armed:");
+
+    u8g2.drawStr(7, 37, "Lights:");
+
+    u8g2.drawStr(84, 21, "Up:");
+
+    u8g2.drawStr(72, 37, "Down:");
+
+    u8g2.drawStr(19, 53, "Menu:");
+
+    u8g2.drawStr(72, 53, "Back:");
+
+    //Lights
+    if (lightSwitchState) {
+      u8g2.drawFilledEllipse(58, 32, 6, 6);
+    }
+    else {
+      u8g2.drawEllipse(58, 32, 6, 6);
+    }
+
+    //Down
+    if (downButton.isPressed()) {
+      u8g2.drawFilledEllipse(111, 32, 6, 6);
+    }
+    else {
+      u8g2.drawEllipse(111, 32, 6, 6);
+    }
+
+    //Menu
+    if (menuButton.isPressed()) {
+      u8g2.drawFilledEllipse(58, 48, 6, 6);
+    }
+    else {
+      u8g2.drawEllipse(58, 48, 6, 6);
+    }
+    
+    //Armed
+    if (armedSwitchState) {
+      u8g2.drawFilledEllipse(58, 16, 6, 6);
+    }
+    else {
+      u8g2.drawEllipse(58, 16, 6, 6);
+    }
+
+    //Back
+    if (backButton.isPressed()) {
+      u8g2.drawFilledEllipse(111, 48, 6, 6);
+    }
+    else {
+      u8g2.drawEllipse(111, 48, 6, 6);
+    }
+
+    //Up
+    if (upButton.isPressed()) {
+      u8g2.drawFilledEllipse(111, 16, 6, 6);
+    }
+    else {
+      u8g2.drawEllipse(111, 16, 6, 6);
+    }
+
   }
+  else if (currentScreen == Screen::AUTOCALIBRATE1) {
+    u8g2.drawRFrame(2, 2, 124, 59, 5);
+    u8g2.setFont(u8g2_font_crox1hb_tf);
+
+    // u8g2.drawStr(45, 18, "Confirm");
+
+    if (calibrationStage <= 3) {
+      u8g2.drawStr(44, 29, "Release");
+      u8g2.drawStr(38, 45, "Joysticks!");
+    }
+    else if (calibrationStage == 4) {
+      u8g2.drawStr(21, 29, "Move Joysticks");
+      u8g2.drawStr(25, 45, "to max range!");
+    }
+    else if (calibrationStage == 5) {
+      u8g2.drawStr(35, 29, "Calibration");
+      u8g2.drawStr(38, 45, "Complete!");
+    }
+  }
+  else if (currentScreen == Screen::SAVECHANGES) {
+
+    u8g2.drawRFrame(2, 2, 124, 59, 5);
+
+    u8g2.setFont(u8g2_font_crox1hb_tf);
+    // u8g2.drawStr(45, 18, "Confirm");
+
+    u8g2.drawStr(21, 29, "Save Changes?");
+
+    if (saveChangesSelect) {
+      u8g2.drawRFrame(68, 40, 30, 15, 5);
+    }
+    else {
+      u8g2.drawRFrame(30, 40, 30, 15, 5);
+    }
+
+    u8g2.setFont(u8g2_font_crox1hb_tf);
+    u8g2.drawStr(72, 52, "Yes");
+    u8g2.drawStr(37, 52, "No");
+
+  }    
+
+    
+  
   
   u8g2.sendBuffer();
 }
 
+
+void convertData(const CalibrationData& paramData, int16_t* pList) {
+  pList[0] = paramData.centerX1;
+  pList[1] = paramData.centerY1;
+  pList[2] = paramData.minOffsetX1;
+  pList[3] = paramData.maxOffsetX1;
+  pList[4] = paramData.minOffsetY1;
+  pList[5] = paramData.maxOffsetY1;
+
+  pList[6] = paramData.centerX2;
+  pList[7] = paramData.centerY2;
+  pList[8] = paramData.minOffsetX2;
+  pList[9] = paramData.maxOffsetX2;
+  pList[10] = paramData.minOffsetY2;
+  pList[11] = paramData.maxOffsetY2;
+};
+
+void convertBackData(const int16_t list[12]) {
+  centerX1     = list[0];
+  centerY1     = list[1];
+  minOffsetX1  = list[2];
+  maxOffsetX1  = list[3];
+  minOffsetY1  = list[4];
+  maxOffsetY1  = list[5];
+
+  centerX2     = list[6];
+  centerY2     = list[7];
+  minOffsetX2  = list[8];
+  maxOffsetX2  = list[9];
+  minOffsetY2  = list[10];
+  maxOffsetY2  = list[11];
+}

@@ -21,7 +21,7 @@ struct JoystickPayload {
   int8_t joyLY;
 
   uint8_t armingSwitch : 1;
-  uint8_t toggleSwitch2 : 1;
+  uint8_t lightSwitch : 1;
   uint8_t toggle3Switch1 : 2;
   uint8_t toggle3Switch2 : 2;
   uint8_t reserved : 2;
