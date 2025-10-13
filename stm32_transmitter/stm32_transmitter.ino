@@ -29,12 +29,23 @@ const unsigned char epd_bitmap_icon_swandbtntest [] PROGMEM = {
 	0x80, 0x01, 0x80, 0x01, 0xf8, 0x1f, 0xfc, 0x3f, 0xfc, 0x3f, 0xfc, 0x3f, 0xf8, 0x1f, 0x00, 0x00
 };
 
+const unsigned char epd_bitmap_icon_reset [] PROGMEM = {
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x03, 0xc0, 0x07, 0x30, 0x03, 0x10, 0x09, 0x08, 0x10, 
+	0x08, 0x10, 0x08, 0x10, 0x08, 0x10, 0x10, 0x08, 0x30, 0x0c, 0xc0, 0x03, 0x00, 0x00, 0x00, 0x00
+};
+
+const unsigned char epd_bitmap_icon_resetv2 [] PROGMEM = {
+	0x00, 0x01, 0x00, 0x03, 0xc0, 0x07, 0x30, 0x03, 0x08, 0x11, 0x04, 0x20, 0x04, 0x20, 0x02, 0x40, 
+	0x02, 0x40, 0x02, 0x40, 0x02, 0x40, 0x04, 0x20, 0x04, 0x20, 0x08, 0x10, 0x30, 0x0c, 0xc0, 0x03
+};
+
 // Array of all bitmaps for convenience. (Total bytes used to store images in PROGMEM = 144)
-const int epd_bitmap_allArray_LEN = 3;
+const int epd_bitmap_allArray_LEN = 4;
 const unsigned char* bitmap_icons[epd_bitmap_allArray_LEN] = {
 	epd_bitmap_icon_autocalibrate,
 	epd_bitmap_icon_manualsetup,
-	epd_bitmap_icon_swandbtntest
+	epd_bitmap_icon_swandbtntest,
+  epd_bitmap_icon_resetv2
 };
 
 
@@ -121,13 +132,14 @@ const unsigned char epd_bitmap_popup_warning [] PROGMEM = {
 };
 
 
-const int NUM_ITEMS = 3; // number of items in the list and also the number of screenshots and screenshots with QR codes (other screens)
+const int NUM_ITEMS = 4; // number of items in the list and also the number of screenshots and screenshots with QR codes (other screens)
 const int MAX_ITEM_LENGTH = 20; // maximum characters for the item name
 
 char menu_items [NUM_ITEMS] [MAX_ITEM_LENGTH] = {  // array with item names
   { "Auto Calibrate" }, 
   { "Manual Setup" }, 
-  { "Sw and Btn Test" }
+  { "Sw and Btn Test" },
+  { "Factory Reset" }
 };
 
 const int NUM_PARAMS = 12; // number of items in the list and also the number of screenshots and screenshots with QR codes (other screens)
@@ -249,7 +261,7 @@ unsigned long batteryTime = 0;
 const unsigned long batteryInterval = 1000;
 
 bool confirmSelect = false;
-
+bool factoryResetSelect = false;
 
 bool showText = true;
 unsigned long previousMillis = 0;
@@ -309,6 +321,7 @@ enum Screen {
   SWANDBTNTEST,
   AUTOCALIBRATE1,
   SAVECHANGES,
+  FACTORYRESET,
 };
 
 Screen currentScreen = Screen::HOME;
@@ -436,6 +449,10 @@ void loop() {
       else if (strcmp(menu_items[item_selected], "Sw and Btn Test") == 0) {
         currentScreen = Screen::SWANDBTNTEST;
       }
+      else if (strcmp(menu_items[item_selected], "Factory Reset") == 0) {
+        currentScreen = Screen::FACTORYRESET;
+        factoryResetSelect = false;
+      }
     }
     MenuScreenCal();
   }
@@ -463,6 +480,7 @@ void loop() {
       if (backButton.isPressed()) {
         currentScreen = Screen::SAVECHANGES;
         param_selected = 0;
+        saveChangesSelect = false;
       }
       else if (upButton.isPressed()) {
         param_selected = param_selected - 1;
@@ -518,10 +536,30 @@ void loop() {
     else if (menuButton.isPressed()) {
       if (saveChangesSelect) {
         convertBackData(params_data_list);
+
+        //? IDK why but i need to run this twice for it to save
+        saveCalibration();
         saveCalibration();
       }
       currentScreen = Screen::MENU;
     }
+  }
+
+    else if (currentScreen == Screen::FACTORYRESET) {
+    if (backButton.isPressed()) {
+      currentScreen = Screen::MENU;
+    }
+    else if (upButton.isPressed() || downButton.isPressed()) {
+      factoryResetSelect = !factoryResetSelect;
+    }
+    else if (menuButton.isPressed()) {
+      if (factoryResetSelect) {
+        resetParams();
+      }
+      currentScreen = Screen::MENU;
+      
+    }
+
   }
 
 
@@ -568,6 +606,7 @@ void saveCalibration() {
   };
   EEPROM.put(EEPROM_ADDR, data);
   Serial.println("Calibration saved!");
+  // loadCalibration();
 }
 
 void loadCalibration() {
@@ -769,7 +808,7 @@ void handleCalibration() {
         if (rawY2 < minOffsetY2) minOffsetY2 = rawY2;
         if (rawY2 > maxOffsetY2) maxOffsetY2 = rawY2;
       } else {
-        // saveCalibration(); //! TURN THIS BACK ON AFTER TESTING!!!
+        saveCalibration(); //! TURN THIS BACK ON AFTER TESTING!!!
         // isCalibrating = false;
         Serial.println("Calibration complete!");
         prevTime = millis();
@@ -1081,7 +1120,29 @@ void drawUI() {
     u8g2.drawStr(72, 52, "Yes");
     u8g2.drawStr(37, 52, "No");
 
-  }    
+  }
+  
+  else if (currentScreen == Screen::FACTORYRESET) {
+
+    u8g2.drawRFrame(2, 2, 124, 59, 5);
+
+    u8g2.setFont(u8g2_font_crox1hb_tf);
+    // u8g2.drawStr(45, 18, "Confirm");
+
+    u8g2.drawStr(21, 29, "Factory Reset?");
+
+    if (factoryResetSelect) {
+      u8g2.drawRFrame(68, 40, 30, 15, 5);
+    }
+    else {
+      u8g2.drawRFrame(30, 40, 30, 15, 5);
+    }
+
+    u8g2.setFont(u8g2_font_crox1hb_tf);
+    u8g2.drawStr(72, 52, "Yes");
+    u8g2.drawStr(37, 52, "No");
+
+  }  
 
     
   
@@ -1120,4 +1181,24 @@ void convertBackData(const int16_t list[12]) {
   maxOffsetX2  = list[9];
   minOffsetY2  = list[10];
   maxOffsetY2  = list[11];
+}
+
+void resetParams() {
+  centerX1     = 506;
+  centerY1     = 500;
+  minOffsetX1  = -507;
+  maxOffsetX1  = 510;
+  minOffsetY1  = -500;
+  maxOffsetY1  = 516;
+
+  centerX2     = 490;
+  centerY2     = 483;
+  minOffsetX2  = -490;
+  maxOffsetX2  = 526;
+  minOffsetY2  = -483;
+  maxOffsetY2  = 533;
+
+  //? IDK why but i need to run this twice for it to save
+  saveCalibration();
+  saveCalibration();
 }
