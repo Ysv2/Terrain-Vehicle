@@ -39,12 +39,19 @@ const unsigned char epd_bitmap_icon_resetv2 [] PROGMEM = {
 	0x02, 0x40, 0x02, 0x40, 0x02, 0x40, 0x04, 0x20, 0x04, 0x20, 0x08, 0x10, 0x30, 0x0c, 0xc0, 0x03
 };
 
+// 'light', 16x16px
+const unsigned char epd_bitmap_light [] PROGMEM = {
+	0x00, 0x00, 0xe0, 0x07, 0x10, 0x08, 0x08, 0x10, 0x04, 0x20, 0x04, 0x20, 0x04, 0x20, 0x04, 0x20, 
+	0x08, 0x10, 0x10, 0x08, 0x20, 0x04, 0xe0, 0x07, 0x20, 0x04, 0xc0, 0x03, 0x80, 0x01, 0x00, 0x00
+};
+
 // Array of all bitmaps for convenience. (Total bytes used to store images in PROGMEM = 144)
-const int epd_bitmap_allArray_LEN = 4;
+const int epd_bitmap_allArray_LEN = 5;
 const unsigned char* bitmap_icons[epd_bitmap_allArray_LEN] = {
 	epd_bitmap_icon_autocalibrate,
 	epd_bitmap_icon_manualsetup,
 	epd_bitmap_icon_swandbtntest,
+  epd_bitmap_light,
   epd_bitmap_icon_resetv2
 };
 
@@ -132,13 +139,14 @@ const unsigned char epd_bitmap_popup_warning [] PROGMEM = {
 };
 
 
-const int NUM_ITEMS = 4; // number of items in the list and also the number of screenshots and screenshots with QR codes (other screens)
+const int NUM_ITEMS = 5; // number of items in the list and also the number of screenshots and screenshots with QR codes (other screens)
 const int MAX_ITEM_LENGTH = 20; // maximum characters for the item name
 
 char menu_items [NUM_ITEMS] [MAX_ITEM_LENGTH] = {  // array with item names
   { "Auto Calibrate" }, 
   { "Manual Setup" }, 
   { "Sw and Btn Test" },
+  { "Lights" },
   { "Factory Reset" }
 };
 
@@ -322,6 +330,7 @@ enum Screen {
   AUTOCALIBRATE1,
   SAVECHANGES,
   FACTORYRESET,
+  LIGHTS,
 };
 
 Screen currentScreen = Screen::HOME;
@@ -371,31 +380,12 @@ void loop() {
 
   armedSwitchState = !digitalRead(ARMED_SWITCH); // True --> ON, False --> OFF
   lightSwitchState = !digitalRead(LIGHT_SWITCH); // True --> ON, False --> OFF
-  // if (calibrateButton.isPressed() && !isCalibrating && !armedSwitchState) {
-  //   startCalibration();
-  // }
 
-
-
-
-  // if (upButton.isPressed()) {
-  //   Serial.println("upButton pressed");
-  // }
-  // if (downButton.isPressed()) {
-  //   Serial.println("downButton pressed");
-  // }
-  // if (backButton.isPressed()) {
-  //   Serial.println("backButton pressed");
-  // }
 
   if (millis() - lastSendTime >= sendInterval) {
     lastSendTime = millis();
     sendPayload();
   }
-
-  // if (isCalibrating) {
-  //   handleCalibration();
-  // }
 
   if (millis() - batteryTime >= batteryInterval) {
     batteryTime = millis();
@@ -452,6 +442,9 @@ void loop() {
       else if (strcmp(menu_items[item_selected], "Factory Reset") == 0) {
         currentScreen = Screen::FACTORYRESET;
         factoryResetSelect = false;
+      }
+      else if (strcmp(menu_items[item_selected], "Lights") == 0) {
+        currentScreen = Screen::LIGHTS;
       }
     }
     MenuScreenCal();
@@ -545,7 +538,7 @@ void loop() {
     }
   }
 
-    else if (currentScreen == Screen::FACTORYRESET) {
+  else if (currentScreen == Screen::FACTORYRESET) {
     if (backButton.isPressed()) {
       currentScreen = Screen::MENU;
     }
@@ -562,6 +555,21 @@ void loop() {
 
   }
 
+  else if (currentScreen == Screen::LIGHTS) {
+    if (backButton.isPressed()) {
+      currentScreen = Screen::MENU;
+    }
+    else if (upButton.isPressed()) {
+
+    }
+    else if (downButton.isPressed()) {
+
+    }
+    else if (menuButton.isPressed()) {
+
+    }
+
+  }
 
 }
 
@@ -591,12 +599,6 @@ void waitForArmSwitch() {
     u8g2.sendBuffer();
   }
 }
-
-// void startCalibration() {
-//   isCalibrating = true;
-//   calibrationStage = 0;
-// }
-
 
 
 void saveCalibration() {
@@ -687,13 +689,6 @@ JoystickPayload readJoystick() {
 
 
 void sendPayload() {
-  // if (isCalibrating) {
-    // // payload = {};  // Send 0 during calibration
-    // memset(&payload, 0, sizeof(payload));
-  // } else {
-    // payload = readJoystick();
-    // payload.armingSwitch = armedSwitchState;
-  // }
 
   if (currentScreen == Screen::HOME) {
     payload = readJoystick();
@@ -702,6 +697,8 @@ void sendPayload() {
   else {// Send 0 when not in Home
     memset(&payload, 0, sizeof(payload));
   }
+
+  payload.lightSwitch = lightSwitchState;
 
   RF24NetworkHeader header(other_node);
   bool connection = network.write(header, &payload, sizeof(payload));
@@ -809,7 +806,6 @@ void handleCalibration() {
         if (rawY2 > maxOffsetY2) maxOffsetY2 = rawY2;
       } else {
         saveCalibration(); //! TURN THIS BACK ON AFTER TESTING!!!
-        // isCalibrating = false;
         Serial.println("Calibration complete!");
         prevTime = millis();
         calibrationStage++;
@@ -920,6 +916,10 @@ void drawUI() {
       u8g2.setFont(u8g2_font_t0_13b_tr);
       u8g2.drawStr(31, 14, "Armed");
     }
+    if (lightSwitchState) {
+      u8g2.drawXBMP(105, 27, 16, 16, epd_bitmap_light);
+    }
+
   }
   else if (currentScreen == Screen::MENU) {
     // selected item background
@@ -977,12 +977,9 @@ void drawUI() {
     itoa(params_data_list[param_sel_previous], buf, 10); // base 10
     u8g2.drawStr(90, 15, buf); 
 
-    // u8g2.drawXBMP( 4, 2, 16, 16, bitmap_icons[param_sel_previous]);          
-
     // draw selected item as icon + label in bold font
     u8g2.setFont(u8g2_font_crox1hb_tf);    
     u8g2.drawStr(5, 15+20+2, param_items[param_selected]);
-    // Serial.println(centerX1);
     itoa(params_data_list[param_selected], buf, 10); // base 10
     if (manualEdit) {
       if (millis() - previousMillis >= blinkInterval) {
@@ -998,15 +995,11 @@ void drawUI() {
       u8g2.drawStr(90, 15+20+2, buf);   
     }  
     
-
-    // u8g2.drawXBMP( 4, 24, 16, 16, bitmap_icons[item_selected]);     
-
     // draw next item as icon + label
     u8g2.setFont(u8g2_font_crox1h_tf);     
     u8g2.drawStr(5, 15+20+20+2+2, param_items[param_sel_next]);
     itoa(params_data_list[param_sel_next], buf, 10); // base 10   
     u8g2.drawStr(90, 15+20+20+2+2, buf); 
-    // u8g2.drawXBMP( 4, 46, 16, 16, bitmap_icons[item_sel_next]);  
 
     // draw scrollbar background
     u8g2.drawXBMP(128-8, 0, 8, 64, bitmap_scrollbar_background);
@@ -1143,6 +1136,14 @@ void drawUI() {
     u8g2.drawStr(37, 52, "No");
 
   }  
+
+  else {
+    u8g2.drawRFrame(2, 2, 124, 59, 5);
+
+    u8g2.setFont(u8g2_font_crox1hb_tf);
+
+    u8g2.drawStr(20, 29, "Work In Progess!");
+  }
 
     
   

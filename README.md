@@ -1,12 +1,12 @@
 # Terrian-Vehicle
+
 Repo containing code for EMC Terrain Vehicle <br>
 Each component is divided into folders <br>
 
+## TO-DO
 
-### TO-DO: <br>
-<li> Create a factory reset function to reset the controller params </li>
-<li> Make the lights go brrrr</li>
-
+- [x] Create a factory reset function to reset the controller params
+- [ ] Make the lights go brrrr
 
 <br>
 

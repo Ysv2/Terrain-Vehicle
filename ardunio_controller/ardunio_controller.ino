@@ -1,6 +1,19 @@
 #include <Wire.h>
+#include <Adafruit_NeoPixel.h>
 
 #define SLAVE_ADDRESS 0x08
+
+#define LED_PIN 2
+#define LED_COUNT 28
+
+// NeoPixel brightness, 0 (min) to 255 (max)
+#define BRIGHTNESS 50 // Set BRIGHTNESS to about 1/5 (max = 255)
+Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+uint32_t warm_white = strip.Color(255, 200, 80);
+uint32_t very_warm_white = strip.Color(255, 180, 40);
+uint32_t neutral_white = strip.Color(255, 240, 200);
+uint32_t red = strip.Color(255, 0, 0);
 
 //Motor Pin Constants
 const int ssPinL = 8;
@@ -23,9 +36,12 @@ const unsigned long TIMEOUT_DURATION = 2000;  // Stop if no command for 2 second
 struct Velocity1D {
   int8_t rightV;
   int8_t leftV;
+
+  uint8_t lights;
+
 };
 
-Velocity1D receivedData = {0, 0};
+Velocity1D receivedData = {0, 0, 0};
 
 // void processMovementCommand(int8_t rightVel, int8_t leftVel) {
 //   if (rightVel > 0) { //Forward
@@ -114,6 +130,10 @@ void processMovementCommand(int8_t rightVel, int8_t leftVel) {
 }
 
 void setup() {
+
+  strip.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
+  strip.show();            // Turn OFF all pixels ASAP
+  strip.setBrightness(BRIGHTNESS);
   
   pinMode(ssPinL, OUTPUT);
   pinMode(rotationPinL, OUTPUT);
@@ -156,6 +176,18 @@ void loop() {
     }
     lastSendTime = currentTime;
   }
+
+  if (receivedData.lights == 0) {
+    strip.clear(); //! Off leds
+  }
+  else if (receivedData.lights == 1) {
+    // strip.fill(red, 0, strip.numPixels() - 1);
+    // strip.fill(color, first, count);
+    strip.fill(red, 0, 14);
+    strip.fill(warm_white, 14, 14);
+    strip.show();
+  }
+  
 }
 
 
