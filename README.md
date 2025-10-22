@@ -1,12 +1,15 @@
-# Terrian-Vehicle
+# Terrain-Vehicle - An EMC Project
 
-Repo containing code for EMC Terrain Vehicle <br>
-Each component is divided into folders <br>
+![Terrain Vehicle](/assets/terrainpic.jpg)
+
+<br>
+
+The EMC Terrain Vehicle is a tracked robot designed to traverse uneven terrain. It is controlled using a custom-built remote controller developed by our team
 
 ## TO-DO
 
 - [x] Create a factory reset function to reset the controller params
-- [ ] Make the lights go brrrr
+- [x] Make the lights go brrrr
 
 <br>
 
