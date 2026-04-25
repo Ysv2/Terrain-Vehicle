@@ -46,12 +46,12 @@ const unsigned char epd_bitmap_light [] PROGMEM = {
 };
 
 // Array of all bitmaps for convenience. (Total bytes used to store images in PROGMEM = 144)
-const int epd_bitmap_allArray_LEN = 5;
+const int epd_bitmap_allArray_LEN = 4;
 const unsigned char* bitmap_icons[epd_bitmap_allArray_LEN] = {
 	epd_bitmap_icon_autocalibrate,
 	epd_bitmap_icon_manualsetup,
 	epd_bitmap_icon_swandbtntest,
-  epd_bitmap_light,
+  // epd_bitmap_light,
   epd_bitmap_icon_resetv2
 };
 
@@ -139,14 +139,14 @@ const unsigned char epd_bitmap_popup_warning [] PROGMEM = {
 };
 
 
-const int NUM_ITEMS = 5; // number of items in the list and also the number of screenshots and screenshots with QR codes (other screens)
+const int NUM_ITEMS = 4; // number of items in the list and also the number of screenshots and screenshots with QR codes (other screens)
 const int MAX_ITEM_LENGTH = 20; // maximum characters for the item name
 
 char menu_items [NUM_ITEMS] [MAX_ITEM_LENGTH] = {  // array with item names
   { "Auto Calibrate" }, 
   { "Manual Setup" }, 
   { "Sw and Btn Test" },
-  { "Lights" },
+  // { "Lights" },
   { "Factory Reset" }
 };
 
@@ -330,7 +330,7 @@ enum Screen {
   AUTOCALIBRATE1,
   SAVECHANGES,
   FACTORYRESET,
-  LIGHTS,
+  // LIGHTS,
 };
 
 Screen currentScreen = Screen::HOME;
@@ -443,9 +443,9 @@ void loop() {
         currentScreen = Screen::FACTORYRESET;
         factoryResetSelect = false;
       }
-      else if (strcmp(menu_items[item_selected], "Lights") == 0) {
-        currentScreen = Screen::LIGHTS;
-      }
+      // else if (strcmp(menu_items[item_selected], "Lights") == 0) {
+      //   currentScreen = Screen::LIGHTS;
+      // }
     }
     MenuScreenCal();
   }
@@ -555,21 +555,21 @@ void loop() {
 
   }
 
-  else if (currentScreen == Screen::LIGHTS) {
-    if (backButton.isPressed()) {
-      currentScreen = Screen::MENU;
-    }
-    else if (upButton.isPressed()) {
+  // else if (currentScreen == Screen::LIGHTS) {
+  //   if (backButton.isPressed()) {
+  //     currentScreen = Screen::MENU;
+  //   }
+  //   else if (upButton.isPressed()) {
 
-    }
-    else if (downButton.isPressed()) {
+  //   }
+  //   else if (downButton.isPressed()) {
 
-    }
-    else if (menuButton.isPressed()) {
+  //   }
+  //   else if (menuButton.isPressed()) {
 
-    }
+  //   }
 
-  }
+  // }
 
 }
 

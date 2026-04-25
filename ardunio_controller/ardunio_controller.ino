@@ -179,12 +179,14 @@ void loop() {
 
   if (receivedData.lights == 0) {
     strip.clear(); //! Off leds
+    strip.show();
+
   }
   else if (receivedData.lights == 1) {
     // strip.fill(red, 0, strip.numPixels() - 1);
     // strip.fill(color, first, count);
-    strip.fill(red, 0, 14);
-    strip.fill(warm_white, 14, 14);
+    strip.fill(warm_white, 0, 14);
+    strip.fill(red, 14, 14);
     strip.show();
   }
   
