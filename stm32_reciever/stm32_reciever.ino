@@ -21,7 +21,7 @@ struct JoystickPayload {
   int8_t joyLY;
 
   uint8_t armingSwitch : 1;
-  uint8_t toggleSwitch2 : 1;
+  uint8_t lightSwitch : 1;
   uint8_t toggle3Switch1 : 2;
   uint8_t toggle3Switch2 : 2;
   uint8_t reserved : 2;
@@ -30,6 +30,8 @@ struct JoystickPayload {
 struct Velocity1D {
   int8_t rightV;
   int8_t leftV;
+
+  uint8_t lights;
 
 };
 
@@ -46,6 +48,9 @@ const unsigned long BUZZER_TIME = 150;
 bool enableBuzzer = false;
 bool buzzerActive = false;
 bool prevArmingState = false;
+bool currentArmingState = false;
+uint8_t lightsState = 0; // Can add more states such as disconnection state, off, on, etc...
+// 0 --> off, 1 --> on, 2 --> disconnected (Future)
 
 
 // Heartbeat check
@@ -56,6 +61,7 @@ void checkHeartbeat() {
     // Stop motors
     velocityData.rightV = 0;
     velocityData.leftV = 0;
+    velocityData.lights = 0;
     sendVelocityData(velocityData);
 
     Serial.println("Motors stopped due to disconnection.");
@@ -122,7 +128,8 @@ void loop() {
     Serial.print(" | JL X: "); Serial.print(payload.joyLX);
     Serial.print(" Y: "); Serial.println(payload.joyLY);
 
-    bool currentArmingState = payload.armingSwitch;
+    currentArmingState = payload.armingSwitch;
+    lightsState = payload.lightSwitch;
 
     if (currentArmingState && !prevArmingState) {
       // Rising edge detected (arming just turned on)
@@ -139,6 +146,8 @@ void loop() {
       velocityData.rightV = 0;
       velocityData.leftV = 0;
     }
+
+    velocityData.lights = lightsState;
 
     sendVelocityData(velocityData);
 

@@ -42,7 +42,7 @@ void loop() {
   //   strip.setPixelColor(i, 255, 200, 80);
   // }
 
-  //! Set led to specific colour
+  // //! Set led to specific colour
   // strip.fill(red, 0, strip.numPixels() - 1);
   // strip.fill(red, 0, 7);
   // strip.fill(warm_white, 7, strip.numPixels() - 1);
