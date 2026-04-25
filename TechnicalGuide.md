@@ -107,7 +107,7 @@ The receiver can be found in the box where the power switches and e-stop are loc
 
 > **NOTE:** Arduino uses **5V** logic whereas stm32 uses **3.3V** logic thus a logic level shifter is used between the 2 devices I2C lines (SDA & SCL Pins).
 
-> ⚠️ **WARNING:** When flashing the Stm32 board for the reciever, if you are using 5V power from the flashing device **DISCONNECT** the power pins that receive 5V from the voltage regulator to prevent back feeding power which may **DAMAGE** the voltage regulator. Refer to `SetupGuide.md` for detailed information on how to flash the Stm32.
+> ⚠️ **WARNING:** When flashing the Stm32 board for the reciever, if you are using 5V power from the flashing device **DISCONNECT** the power pins that receive 5V from the voltage regulator to prevent back feeding power which may **DAMAGE** the voltage regulator. Refer to [Setup Guide](./SetupGuide.md) for detailed information on how to flash the Stm32.
 
 ![STM23pinout](/assets/stm32_pinout.svg)
 ![Receiverpinout](/assets/receiver_pinout.png)
